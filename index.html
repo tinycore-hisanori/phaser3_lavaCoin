@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport"
+        content="width = device-width, initial-scale = 1.0, minimum-scale = 1, maximum-scale = 1, user-scalable = no, viewport-fit=cover,minimal-ui" />
+    <title></title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/matter-js@0.17.1/build/matter.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.3/dist/howler.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+
+</head>
+
+<body>
+    <script>
+        var bgm = new Howl({
+            src: ['bgm.mp3'],
+            loop: true,
+            volume: 0.2,
+        });
+
+        var bgmOver = new Howl({
+            src: ['gameover.mp3']
+        });
+
+        var bgmClear = new Howl({
+            src: ['clear.mp3']
+        });
+
+
+
+        var bGame = false;
+        var gameWidth = 720, gameHeight = 1280;
+        var currentScene, clickButton;
+        var currentStageNo = 0;
+        var player;
+        var txtEnding, btnReturn;
+        var stageLocks = [0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1];
+
+        var platformArray = [];
+        var keyArray = [];
+        var coinArray = [];
+        var remainCoin = 0;
+        var getCoin = 0;
+        var bAlive = true;
+
+        class platformContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, width, height, sheet, rotateVal) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, sheet);
+                this.add(this._obj);
+                this.setSize(width, height);
+                this._bodyObj = scene.matter.add.gameObject(this);//.setFixedRotation();
+                this._bodyObj.body.label = "platform";
+                //this._bodyObj.setBounce(bounds);
+                this._bodyObj.setMass(100);
+                this._bodyObj.setAngle(rotateVal);
+
+                this._bodyObj.body.isStatic = true;
+                scene.add.existing(this._bodyObj);
+            }
+        }
+
+        class keyContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, width, height, rotateVal) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "key");
+                this.add(this._obj);
+                this.setSize(width, height);
+                this._bodyObj = scene.matter.add.gameObject(this);//.setFixedRotation();
+                this._bodyObj.body.label = "key";
+                //this._bodyObj.setBounce(bounds);
+                this._bodyObj.setMass(100);
+                this._bodyObj.setAngle(rotateVal);
+
+                this._bodyObj.body.isStatic = true;
+                scene.add.existing(this._bodyObj);
+
+                this.setInteractive();
+                this.on('pointerdown', function (pointer) {
+                    console.log("sss");
+                    this.doDestroy();
+                }, this);
+            }
+            doDestroy() {
+                this._bodyObj.destroy();
+            }
+        }
+
+        class liquidContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, objectType) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "liquid");
+                this.add(this._obj);
+                this._bodyCircle = scene.matter.add.circle(x, y, 10);
+                this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
+                if (objectType == 0) {//stone
+                    this._bodyObj.body.label = "stone";
+                    this._obj.setFrame(0);
+                } else if (objectType == 1) {//
+                    this._obj.setFrame(1);
+                    this._bodyObj.body.label = "water";
+                } else if (objectType == 2) {//lava
+                    this._bodyObj.body.label = "lava";
+                    this._obj.setFrame(2);
+                }
+                //this._bodyObj.setBounce(bounds);
+                this._bodyObj.setMass(10);
+                this._bodyObj.body.isStatic = false;
+                scene.add.existing(this._bodyObj);
+            }
+            doDestroy() {
+                this._bodyObj.destroy();
+            }
+        }
+        class coinContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y, _no) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, 0, "coin");
+                this.add(this._obj);
+                this._bodyCircle = scene.matter.add.circle(x, y, 20);
+                this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
+                this._bodyObj.body.label = "coin";
+                this._bodyObj.setMass(10);
+                this._bodyObj.body.noCount = _no;
+                this.noCount = _no;
+                this._bodyObj.body.isStatic = false;
+                scene.add.existing(this._bodyObj);
+            }
+            doDestroy() {
+                let index = coinArray.findIndex((o) => o.noCount === this.noCount);
+                this._bodyObj.destroy();
+                coinArray.splice(index, 1);
+            }
+        }
+
+        class playerContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, -10, "player");
+                this.add(this._obj);
+                this.setSize(100, 150);
+                this._bodyObj = scene.matter.add.gameObject(this);
+                this._bodyObj.setFixedRotation();
+                this._bodyObj.body.label = "player";
+                this._bodyObj.setMass(999);
+                this._bodyObj.body.isStatic = false;
+                scene.add.existing(this._bodyObj);
+            }
+            doDestroy() {
+                this._bodyObj.destroy();
+            }
+        }
+
+
+        function initGameScene() {
+            var bg = currentScene.add
+                .tileSprite(0, 0, gameWidth, gameHeight, "bg001")
+                .setOrigin(0)
+                .setScrollFactor(0);
+            console.log("NO=" + currentStageNo);
+            currentScene.matter.world.setBounds(0, 0, gameWidth, gameHeight);
+
+            platformArray = [];
+            keyArray = [];
+            coinArray = [];
+            getCoin = 0;
+
+            switch (currentStageNo) {
+                case 1:
+                    platformArray.push(new platformContainer(currentScene, gameWidth / 2, 1250, gameWidth, 30, "ground1", 0));
+                    platformArray.push(new platformContainer(currentScene, gameWidth / 2 + 10, 600, gameWidth, 30, "ground1", -30));
+                    platformArray.push(new platformContainer(currentScene, 10, 100, 200, 30, "ground2", 30));
+                    platformArray.push(new platformContainer(currentScene, 300, 100, 200, 30, "ground2", -30));
+
+                    keyArray.push(new keyContainer(currentScene, 200, 550, 200, 30, 60));
+                    keyArray.push(new keyContainer(currentScene, 400, 440, 200, 30, 60));
+
+                    var nLoop = 0;
+                    for (nLoop = 0; nLoop < 20; nLoop++) {
+                        new liquidContainer(currentScene, 600, 100, 2);//lava
+                    }
+                    for (nLoop = 0; nLoop < 8; nLoop++) {
+                        coinArray.push(
+                            new coinContainer(currentScene, 250 + nLoop * 10, 300 + nLoop * 10, nLoop)
+                        );
+                    }
+                    //new liquidContainer(currentScene, 10, 10, 2);//lava
+                    player = new playerContainer(currentScene, 0, 1000);
+                    break;
+            }
+
+            currentScene.matter.world.on("collisionstart", function (e) {
+                e.pairs.forEach(function (p) {
+
+                    if (p.bodyA.label == "player" || p.bodyB.label == "player") {
+                        if (p.bodyA.label == "player" && p.bodyB.label == "coin") {
+                            console.log("coin =" + getCoin);
+                            let obj = coinArray.find(
+                                (o) => o.noCount === p.bodyB.noCount
+                            );
+                            if (obj) {
+                                obj.doDestroy();
+                            }
+                            getCoin++;
+                        }
+                        else if (p.bodyA.label == "coin" && p.bodyB.label == "player") {
+                            console.log("coin =" + getCoin);
+                            let obj = coinArray.find(
+                                (o) => o.noCount === p.bodyA.noCount
+                            );
+                            if (obj) {
+                                obj.doDestroy();
+                            }
+                            getCoin++;
+                        }
+                        if (p.bodyA.label == "player" && p.bodyB.label == "lava") {
+                            bAlive = false;
+                            player.doDestroy();
+                        }
+                        else if (p.bodyA.label == "lava" && p.bodyB.label == "player") {
+                            bAlive = false;
+                            player.doDestroy();
+                        }
+                    }
+
+                    if (p.bodyA.label == "lava" || p.bodyB.label == "lava") {
+                        if (p.bodyA.label == "lava" && p.bodyB.label == "coin") {
+                            let obj = coinArray.find(
+                                (o) => o.noCount === p.bodyB.noCount
+                            );
+                            if (obj) {
+                                obj.doDestroy();
+                            }
+                        }
+                        else if (p.bodyA.label == "coin" && p.bodyB.label == "lava") {
+                            let obj = coinArray.find(
+                                (o) => o.noCount === p.bodyA.noCount
+                            );
+                            if (obj) {
+                                obj.doDestroy();
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        function initUIParams() {
+            txtEnding = currentScene.add
+                .text(200, 100, "")
+                .setScrollFactor(0)
+                .setFontSize(46)
+                .setColor("#ff0");
+
+            btnReturn = currentScene.add
+                .text(gameWidth / 2 - 100, 400, " BACK ")
+                .setScrollFactor(0)
+                .setFontSize(46)
+                .setColor("#ff0")
+                .setBackgroundColor("#aa5500")
+                .setInteractive();
+            btnReturn.on(
+                "pointerdown",
+                () => {
+                    if (bgm != null) {
+                        bgm.stop();
+                    }
+                    if (bgmOver != null) {
+                        bgmOver.stop();
+                    }
+                    currentScene.scene.start("stageSelectScene");
+                },
+                this);
+            btnReturn.visible = false;
+
+        }
+
+        function gameCheck() {
+            var isGameState = 0;//0=Idle,1 = Game Clear, 2=Game Over
+            if (bGame == true) {
+                if (bAlive == false) {
+                    //GAME OVER
+                    isGameState = 2;
+                } else {
+                    if (coinArray.length <= 2 && getCoin == 0) {
+                        //GAME OVER
+                        isGameState = 2;
+                    }
+                    if (coinArray.length <= 2 && getCoin >= 5) {
+                        //GAME CLEAR
+                        isGameState = 1;
+                    }
+                }
+                switch (isGameState) {
+                    case 1://GAME CLEAR
+                        bGame = false;
+                        txtEnding.text = "GAME CLEAR";
+                        btnReturn.visible = true;
+                        bgm.stop();
+                        bgmClear.play();
+                        break;
+                    case 2://GAME OVER
+                        bGame = false;
+                        txtEnding.text = "GAME OVER";
+                        btnReturn.visible = true;
+                        bgm.stop();
+                        bgmOver.play();
+                        break;
+                }
+            }
+        }
+
+
+        class titleScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "titleScene", active: true });
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(150, 100, "KOUKOKU Game1")
+                    .setFontSize(46)
+                    .setColor("#0");
+
+                clickButton = this.add
+                    .text(100, 400, "START TO CLICK")
+                    .setStroke("#0000ff", 4)
+                    .setBackgroundColor("#ddbcff")
+                    .setFontSize("60px")
+                    .setColor("#0f0")
+                    .setInteractive();
+                clickButton.on(
+                    "pointerdown",
+                    () => {
+                        this.scene.start("stageSelectScene");
+                    },
+                    this
+                );
+
+            }
+        }
+
+        class stageSelectScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "stageSelectScene", active: false });
+            }
+            preload() {
+                this.load.spritesheet("stageIcon", "./stage_icon.png", {
+                    frameWidth: 150,
+                    frameHeight: 150
+                });
+
+
+                this.load.image("coin", "./coin50x50.png");
+                this.load.spritesheet("liquid", "./liquid.png", {
+                    frameWidth: 30,
+                    frameHeight: 30
+                });
+                this.load.spritesheet("player", "./seeker_100x150.png", {
+                    frameWidth: 100,
+                    frameHeight: 150
+                });
+                this.load.image("bg001", "./bg1.png");
+                this.load.image("ground1", "./ground_720x30.png");
+                this.load.image("ground2", "./ground_200x30.png");
+
+                this.load.image("key", "./key_200x30.png");
+
+            }
+            create() {
+                currentScene = this;
+                let text = this.add
+                    .text(100, 50, "Stage Select")
+                    .setFontSize(46)
+                    .setColor("#0");
+
+                var stageButtons = [];
+                for (var nLoop = 0; nLoop < stageLocks.length; nLoop++) {
+                    let posX = (nLoop % 3);
+                    let posY = parseInt(nLoop / 3);
+                    stageButtons.push(currentScene.add.sprite(100 + posX * 250, 200 + posY * 300, "stageIcon"));
+                    stageButtons[stageButtons.length - 1].setInteractive();
+                    stageButtons[stageButtons.length - 1].stageNo = (nLoop + 1);
+                    stageButtons[stageButtons.length - 1].stageName = "gameScene" + (nLoop + 1);
+                    let text = currentScene.add
+                        .text(25 + posX * 250, 280 + posY * 300, "Stage " + (nLoop + 1))
+                        .setFontSize(40)
+                        .setColor("#0");
+                    stageButtons[stageButtons.length - 1].setFrame(1);
+                    if (stageLocks[nLoop] == 0) {
+                        stageButtons[stageButtons.length - 1].setFrame(0);
+                        stageButtons[stageButtons.length - 1].on("pointerdown", function (pointer) {
+                            console.log("Stage =" + this.stageName);
+                            currentStageNo = this.stageNo;
+                            currentScene.scene.start("gameScene");
+                        });
+                    } else if (stageLocks[nLoop] == -1) {
+                        text.text = " 準備中";
+                        stageButtons[stageButtons.length - 1].setFrame(2);
+                    }
+                }
+            }
+        }
+
+        class gameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: "gameScene", active: false });
+            }
+            create() {
+                bGame = false;
+                currentScene = this;
+                initGameScene();
+                initUIParams();
+                bGame = true;
+                bAlive = true;
+                bgm.play();
+            }
+            update() {
+                gameCheck();
+            }
+        }
+
+
+
+        var config = {
+            type: Phaser.AUTO,
+            width: gameWidth,
+            height: gameHeight,
+            backgroundColor: "#eaffff",
+            autoResize: true,
+            physics: {
+                default: "matter",
+                matter: {
+                    gravity: {
+                        x: 0,
+                        y: 2.5
+                    },
+                    debug: false
+                }
+            }, scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            },
+            scene: [titleScene, stageSelectScene, gameScene]
+        };
+        var game = new Phaser.Game(config);
+
+
+    </script>
+</body>
+
+</html>
