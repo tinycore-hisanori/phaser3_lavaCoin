@@ -11,7 +11,6 @@
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.17.1/build/matter.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/howler@2.2.3/dist/howler.min.js"></script>
     <link rel="stylesheet" href="style.css">
-
 </head>
 
 <body>
@@ -75,7 +74,7 @@
                 //this._bodyObj.setBounce(bounds);
                 this._bodyObj.setMass(100);
                 this._bodyObj.setAngle(rotateVal);
-
+                this._keyRot = rotateVal;
                 this._bodyObj.body.isStatic = true;
                 scene.add.existing(this._bodyObj);
 
@@ -84,9 +83,32 @@
                     console.log("sss");
                     this.doDestroy();
                 }, this);
+                this.isDestorying = false;
+                this.countDownTime = 30;
+            }
+            preUpdate() {
+                if (this.isDestorying == true) {
+                    console.log("ROT=" + this._bodyObj.body.angle);
+                    //                    console.log("ROT=" + this._keyRot);
+
+                    this.countDownTime = this.countDownTime - 1;
+                    var vec = 5;
+                    var dx = vec * Math.cos(this._bodyObj.body.angle);
+                    var dy = vec * Math.sin(this._bodyObj.body.angle);
+                    this.x = this.x - dx;
+                    this.y = this.y - dy;
+                    if (this.countDownTime <= 0) {
+                        console.log("ssss");
+                        this._bodyObj.destroy();
+                    }
+                }
             }
             doDestroy() {
-                this._bodyObj.destroy();
+                if (this.isDestorying == true) {
+                } else {
+                    this.countDownTime = 60;
+                    this.isDestorying = true;
+                }
             }
         }
 
@@ -95,7 +117,7 @@
                 super(scene, x, y);
                 this._obj = scene.add.sprite(0, 0, "liquid");
                 this.add(this._obj);
-                this._bodyCircle = scene.matter.add.circle(x, y, 10);
+                this._bodyCircle = scene.matter.add.circle(x, y, 6);
                 this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
                 if (objectType == 0) {//stone
                     this._bodyObj.body.label = "stone";
@@ -106,6 +128,10 @@
                 } else if (objectType == 2) {//lava
                     this._bodyObj.body.label = "lava";
                     this._obj.setFrame(2);
+
+                    this._bodyObj.body.restitution = 0.2;
+                    this._bodyObj.body.frictionAir = 0.2;
+                    this._bodyObj.body.friction = 0.2;
                 }
                 //this._bodyObj.setBounce(bounds);
                 this._bodyObj.setMass(10);
@@ -151,7 +177,11 @@
                 scene.add.existing(this._bodyObj);
             }
             doDestroy() {
+                this._obj = currentScene.add.sprite(this.x, this.y, "deadman");
+                this._obj.play("deadmanDying");
                 this._bodyObj.destroy();
+
+
             }
         }
 
@@ -173,11 +203,11 @@
                 case 1:
                     platformArray.push(new platformContainer(currentScene, gameWidth / 2, 1250, gameWidth, 30, "ground1", 0));
                     platformArray.push(new platformContainer(currentScene, gameWidth / 2 + 10, 600, gameWidth, 30, "ground1", -30));
-                    platformArray.push(new platformContainer(currentScene, 10, 100, 200, 30, "ground2", 30));
-                    platformArray.push(new platformContainer(currentScene, 300, 100, 200, 30, "ground2", -30));
+                    //platformArray.push(new platformContainer(currentScene, 10, 100, 200, 30, "ground2", 30));
+                    //platformArray.push(new platformContainer(currentScene, 300, 100, 200, 30, "ground2", -30));
 
-                    keyArray.push(new keyContainer(currentScene, 200, 550, 200, 30, 60));
-                    keyArray.push(new keyContainer(currentScene, 400, 440, 200, 30, 60));
+                    keyArray.push(new keyContainer(currentScene, 200, 580, 200, 30, 60));
+                    keyArray.push(new keyContainer(currentScene, 400, 480, 200, 30, 60));
 
                     var nLoop = 0;
                     for (nLoop = 0; nLoop < 20; nLoop++) {
@@ -192,6 +222,16 @@
                     player = new playerContainer(currentScene, 0, 1000);
                     break;
             }
+
+            currentScene.anims.create({
+                key: "deadmanDying",
+                frameRate: 40,
+                frames: currentScene.anims.generateFrameNumbers("deadman", {
+                    start: 0,
+                    end: 10
+                }), repeat: 0
+            });
+
 
             currentScene.matter.world.on("collisionstart", function (e) {
                 e.pairs.forEach(function (p) {
@@ -319,14 +359,40 @@
             constructor() {
                 super({ key: "titleScene", active: true });
             }
+            preload() {
+                this.load.spritesheet("startBtnImg", "./startButton.png", {
+                    frameWidth: 480,
+                    frameHeight: 237
+                });
+
+            }
             create() {
                 currentScene = this;
+
                 let text = this.add
                     .text(150, 100, "KOUKOKU Game1")
                     .setFontSize(46)
                     .setColor("#0");
 
-                clickButton = this.add
+                    var isPush = false;
+                var startBtn = this.add.sprite(gameWidth / 2, 300, 'startBtnImg', 0).setInteractive();
+                startBtn.setFrame(0);
+                startBtn.on('pointerdown', function () {
+                    this.setFrame(1);
+                    isPush = true;
+                });
+                startBtn.on('pointerup', function () {
+                    this.setFrame(0);
+                    if(isPush == true){
+                        currentScene.scene.start("stageSelectScene");
+                    }
+                });
+                startBtn.on('pointerout', function(pointer, event){
+                    this.setFrame(0);
+                    isPush = false;
+                });
+
+/*                clickButton = this.add
                     .text(100, 400, "START TO CLICK")
                     .setStroke("#0000ff", 4)
                     .setBackgroundColor("#ddbcff")
@@ -340,7 +406,7 @@
                     },
                     this
                 );
-
+*/
             }
         }
 
@@ -369,6 +435,10 @@
                 this.load.image("ground2", "./ground_200x30.png");
 
                 this.load.image("key", "./key_200x30.png");
+                this.load.spritesheet("deadman", "./deadSeekerSprite_160x120.png", {
+                    frameWidth: 160,
+                    frameHeight: 120
+                });
 
             }
             create() {
