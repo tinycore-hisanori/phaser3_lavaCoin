@@ -10,7 +10,7 @@ youtubeの広告とかででてくるスマホゲームをPhaser.jsで実現し�
  
 以下のアドレスでプレイすることができます。
 
-[koukoku1](https://tinycore-hisanori.github.io/phaser3_lavaCoin/)
+[TresureCoinPuzzle](https://tinycore-hisanori.github.io/phaser3_lavaCoin/)
 
 
 # Features
