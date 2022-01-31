@@ -211,8 +211,24 @@
                 this._obj = currentScene.add.sprite(this.x, this.y, "deadman");
                 this._obj.play("deadmanDying");
                 this._bodyObj.destroy();
+            }
+        }
 
-
+        class enemyContainer extends Phaser.GameObjects.Container {
+            constructor(scene, x, y) {
+                super(scene, x, y);
+                this._obj = scene.add.sprite(0, -10, "enemy1");
+                this.add(this._obj);
+                this.setSize(100, 150);
+                this._bodyObj = scene.matter.add.gameObject(this);
+                this._bodyObj.setFixedRotation();
+                this._bodyObj.body.label = "enemy";
+                this._bodyObj.setMass(9999);
+                this._bodyObj.body.isStatic = true;
+                scene.add.existing(this._bodyObj);
+            }
+            doDestroy() {
+                this._bodyObj.destroy();
             }
         }
 
@@ -284,7 +300,6 @@
                     keyArray.push(new keyContainer(currentScene, 100, 650, 200, 30, 60));
                     keyArray.push(new keyContainer(currentScene, 300, 530, 200, 30, 60));
                     keyArray.push(new keyContainer(currentScene, 500, 430, 200, 30, 60));
-
 
                     var nLoop = 0;
                     for (nLoop = 0; nLoop < 13; nLoop++) {
