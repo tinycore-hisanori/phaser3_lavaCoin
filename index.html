@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/matter-js@0.17.1/build/matter.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/howler@2.2.3/dist/howler.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/localforage@1.10.0/dist/localforage.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -29,6 +30,9 @@
             src: ['clear.mp3']
         });
 
+        var seClick = new Howl({
+            src: ['click.mp3']
+        });
 
 
         var bGame = false;
@@ -37,7 +41,7 @@
         var currentStageNo = 0;
         var player;
         var txtEnding, btnReturn;
-        var stageLocks = [0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1];
+        var stageLocks = [0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1];
 
         var platformArray = [];
         var keyArray = [];
@@ -45,6 +49,8 @@
         var remainCoin = 0;
         var getCoin = 0;
         var bAlive = true;
+
+        var bSound = true;
 
         class platformContainer extends Phaser.GameObjects.Container {
             constructor(scene, x, y, width, height, sheet, rotateVal) {
@@ -80,7 +86,6 @@
 
                 this.setInteractive();
                 this.on('pointerdown', function (pointer) {
-                    console.log("sss");
                     this.doDestroy();
                 }, this);
                 this.isDestorying = false;
@@ -117,29 +122,54 @@
                 super(scene, x, y);
                 this._obj = scene.add.sprite(0, 0, "liquid");
                 this.add(this._obj);
-                this._bodyCircle = scene.matter.add.circle(x, y, 6);
+
+                this._bodyCircle =
+                    scene.matter.add.polygon(x, y, 3, 10, {
+                        chamfer: { radius: 5 }
+                    });
                 this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
                 if (objectType == 0) {//stone
                     this._bodyObj.body.label = "stone";
                     this._obj.setFrame(0);
+
+                    this._bodyObj.body.restitution = 0.2;
+                    this._bodyObj.body.density = 2.0;
+                    this._bodyObj.body.frictionAir = 0.0;
+                    this._bodyObj.body.friction = 0.0;
+
                 } else if (objectType == 1) {//
                     this._obj.setFrame(1);
                     this._bodyObj.body.label = "water";
+
+                    this._bodyObj.body.restitution = 0.2;
+                    this._bodyObj.body.density = 1.0;
+                    this._bodyObj.body.frictionAir = 0.0;
+                    this._bodyObj.body.friction = 0.3;
+
                 } else if (objectType == 2) {//lava
                     this._bodyObj.body.label = "lava";
                     this._obj.setFrame(2);
 
                     this._bodyObj.body.restitution = 0.2;
-                    this._bodyObj.body.frictionAir = 0.2;
-                    this._bodyObj.body.friction = 0.2;
+                    this._bodyObj.body.density = 1.0;
+                    this._bodyObj.body.frictionAir = 0.0;
+                    this._bodyObj.body.friction = 0.5;
                 }
-                //this._bodyObj.setBounce(bounds);
                 this._bodyObj.setMass(10);
                 this._bodyObj.body.isStatic = false;
                 scene.add.existing(this._bodyObj);
+
             }
             doDestroy() {
                 this._bodyObj.destroy();
+            }
+            setStone() {
+                this._bodyObj.body.label = "stone";
+                this._obj.setFrame(0);
+                this._bodyObj.body.restitution = 0.2;
+                this._bodyObj.body.density = 2.0;
+                this._bodyObj.body.frictionAir = 0.0;
+                this._bodyObj.body.friction = 0.0;
             }
         }
         class coinContainer extends Phaser.GameObjects.Container {
@@ -147,7 +177,8 @@
                 super(scene, x, y);
                 this._obj = scene.add.sprite(0, 0, "coin");
                 this.add(this._obj);
-                this._bodyCircle = scene.matter.add.circle(x, y, 20);
+                this._bodyCircle =
+                    this._bodyCircle = scene.matter.add.circle(x, y, 20);
                 this._bodyObj = scene.matter.add.gameObject(this, this._bodyCircle);
                 this._bodyObj.body.label = "coin";
                 this._bodyObj.setMass(10);
@@ -172,8 +203,8 @@
                 this._bodyObj = scene.matter.add.gameObject(this);
                 this._bodyObj.setFixedRotation();
                 this._bodyObj.body.label = "player";
-                this._bodyObj.setMass(999);
-                this._bodyObj.body.isStatic = false;
+                this._bodyObj.setMass(9999);
+                this._bodyObj.body.isStatic = true;
                 scene.add.existing(this._bodyObj);
             }
             doDestroy() {
@@ -203,9 +234,6 @@
                 case 1:
                     platformArray.push(new platformContainer(currentScene, gameWidth / 2, 1250, gameWidth, 30, "ground1", 0));
                     platformArray.push(new platformContainer(currentScene, gameWidth / 2 + 10, 600, gameWidth, 30, "ground1", -30));
-                    //platformArray.push(new platformContainer(currentScene, 10, 100, 200, 30, "ground2", 30));
-                    //platformArray.push(new platformContainer(currentScene, 300, 100, 200, 30, "ground2", -30));
-
                     keyArray.push(new keyContainer(currentScene, 200, 580, 200, 30, 60));
                     keyArray.push(new keyContainer(currentScene, 400, 480, 200, 30, 60));
 
@@ -218,9 +246,67 @@
                             new coinContainer(currentScene, 250 + nLoop * 10, 300 + nLoop * 10, nLoop)
                         );
                     }
-                    //new liquidContainer(currentScene, 10, 10, 2);//lava
-                    player = new playerContainer(currentScene, 0, 1000);
+                    player = new playerContainer(currentScene, 10, 1150);
                     break;
+
+                    case 2:
+                    //Ground
+                    platformArray.push(new platformContainer(currentScene, gameWidth / 2, 1250, gameWidth, 30, "ground1", 0));
+                    //Upper left
+                    platformArray.push(new platformContainer(currentScene, 200, 200, 200, 30, "ground2", 30));
+                    //Upper right
+                    platformArray.push(new platformContainer(currentScene, 500, 200, 200, 30, "ground2", -30));
+                    //Under left
+                    platformArray.push(new platformContainer(currentScene, -10, 600, gameWidth, 30, "ground1", 30));
+                    //Under right
+                    platformArray.push(new platformContainer(currentScene, 710, 600, gameWidth, 30, "ground1", -30));
+
+                    keyArray.push(new keyContainer(currentScene, 340, 240, 200, 30, 0));
+                    keyArray.push(new keyContainer(currentScene, 340, 760, 200, 30, 0));
+
+                    var nLoop = 0;
+                    for (nLoop = 0; nLoop < 30; nLoop++) {
+                        new liquidContainer(currentScene, 250 + nLoop, 500, 2);//lava
+                        new liquidContainer(currentScene, 250 + nLoop, 100, 1);//water
+                    }
+                    for (var i = 0; i < 8; i++) {
+                        coinArray.push(
+                            new coinContainer(currentScene, 350 + i * 2, 50, i)
+                        );
+                    }
+
+                    player = new playerContainer(currentScene, 350, 1150);
+                    break;
+
+                case 3:
+                    platformArray.push(new platformContainer(currentScene, gameWidth / 2, 1250, gameWidth, 30, "ground1", 0));
+                    platformArray.push(new platformContainer(currentScene, gameWidth / 2 + 40, 600, gameWidth, 30, "ground1", -30));
+                    keyArray.push(new keyContainer(currentScene, 100, 650, 200, 30, 60));
+                    keyArray.push(new keyContainer(currentScene, 300, 530, 200, 30, 60));
+                    keyArray.push(new keyContainer(currentScene, 500, 430, 200, 30, 60));
+
+
+                    var nLoop = 0;
+                    for (nLoop = 0; nLoop < 13; nLoop++) {
+                        //                        new liquidContainer(currentScene, 400, 300, 2);//lava
+                        new liquidContainer(currentScene, 150, 350, 2);//lava
+                    }
+                    for (nLoop = 0; nLoop < 20; nLoop++) {
+                        new liquidContainer(currentScene, 400, 300, 1);//water
+                        //                        new liquidContainer(currentScene, 650, 250, 1);//water
+                    }
+
+                    for (nLoop = 0; nLoop < 8; nLoop++) {
+                        //coins
+                        coinArray.push(
+                            //                            new coinContainer(currentScene, 150 + nLoop * 10, 350 + nLoop * 10, nLoop)
+                            new coinContainer(currentScene, 650 + nLoop * 10, 250 + nLoop * 10, nLoop)
+                        );
+                    }
+                    player = new playerContainer(currentScene, 0, 1150);
+                    break;
+
+
             }
 
             currentScene.anims.create({
@@ -233,7 +319,7 @@
             });
 
 
-            currentScene.matter.world.on("collisionstart", function (e) {
+            currentScene.matter.world.on("collisionactive", function (e) {
                 e.pairs.forEach(function (p) {
 
                     if (p.bodyA.label == "player" || p.bodyB.label == "player") {
@@ -259,12 +345,29 @@
                         }
                         if (p.bodyA.label == "player" && p.bodyB.label == "lava") {
                             bAlive = false;
-                            player.doDestroy();
+                            if (player) {
+                                player.doDestroy();
+                            }
                         }
                         else if (p.bodyA.label == "lava" && p.bodyB.label == "player") {
                             bAlive = false;
-                            player.doDestroy();
+                            if (player) {
+                                player.doDestroy();
+                            }
                         }
+                        if (p.bodyA.label == "player" && p.bodyB.label == "stone") {
+                            p.bodyB.gameObject.doDestroy();
+                        }
+                        else if (p.bodyA.label == "stone" && p.bodyB.label == "player") {
+                            p.bodyA.gameObject.doDestroy();
+                        }
+                        else if (p.bodyA.label == "player" && p.bodyB.label == "water") {
+                            p.bodyB.gameObject.doDestroy();
+                        }
+                        else if (p.bodyA.label == "water" && p.bodyB.label == "player") {
+                            p.bodyA.gameObject.doDestroy();
+                        }
+
                     }
 
                     if (p.bodyA.label == "lava" || p.bodyB.label == "lava") {
@@ -283,6 +386,27 @@
                             if (obj) {
                                 obj.doDestroy();
                             }
+                        }
+                        if (p.bodyA.label == "lava" && p.bodyB.label == "water") {
+                            p.bodyA.gameObject.setStone();
+                            p.bodyB.gameObject.setStone();
+                        }
+                        else if (p.bodyA.label == "water" && p.bodyB.label == "lava") {
+                            p.bodyA.gameObject.setStone();
+                            p.bodyB.gameObject.setStone();
+                        }
+                        if (p.bodyA.label == "stone" && p.bodyB.label == "lava") {
+                            p.bodyB.gameObject.setStone();
+                        }
+                        else if (p.bodyA.label == "lava" && p.bodyB.label == "stone") {
+                            p.bodyA.gameObject.setStone();
+                        }
+                    }
+                    if (p.bodyA.label == "water" || p.bodyB.label == "water") {
+                        if (p.bodyA.label == "stone" && p.bodyB.label == "water") {
+                            p.bodyB.gameObject.setStone();
+                        } else if (p.bodyA.label == "water" && p.bodyB.label == "stone") {
+                            p.bodyA.gameObject.setStone();
                         }
                     }
                 });
@@ -341,14 +465,18 @@
                         txtEnding.text = "GAME CLEAR";
                         btnReturn.visible = true;
                         bgm.stop();
-                        bgmClear.play();
+                        if (bSound) {
+                            bgmClear.play();
+                        }
                         break;
                     case 2://GAME OVER
                         bGame = false;
                         txtEnding.text = "GAME OVER";
                         btnReturn.visible = true;
                         bgm.stop();
-                        bgmOver.play();
+                        if (bSound) {
+                            bgmOver.play();
+                        }
                         break;
                 }
             }
@@ -360,53 +488,80 @@
                 super({ key: "titleScene", active: true });
             }
             preload() {
+                this.load.image("explanation", "./explanation.png");
+                this.load.image("title", "./title.png");
                 this.load.spritesheet("startBtnImg", "./startButton.png", {
                     frameWidth: 480,
                     frameHeight: 237
+                });
+                this.load.spritesheet("soundBtnImg", "./soundOnOff_200x200.png", {
+                    frameWidth: 200,
+                    frameHeight: 200
                 });
 
             }
             create() {
                 currentScene = this;
+                var bg = currentScene.add
+                    .tileSprite(0, 0, gameWidth, gameHeight, "title")
+                    .setOrigin(0)
+                    .setScale(2)
+                    .setScrollFactor(0);
 
-                let text = this.add
-                    .text(150, 100, "KOUKOKU Game1")
-                    .setFontSize(46)
-                    .setColor("#0");
+                var option1 = bg = currentScene.add
+                    .tileSprite(gameWidth / 2, 1130, 500, 400, "explanation")
+                    .setScale(1.2);
 
-                    var isPush = false;
-                var startBtn = this.add.sprite(gameWidth / 2, 300, 'startBtnImg', 0).setInteractive();
+                var isStartPush = false;
+                var startBtn = this.add.sprite(gameWidth / 2, 500, 'startBtnImg', 0)
+                    .setScale(0.8)
+                    .setInteractive();
                 startBtn.setFrame(0);
                 startBtn.on('pointerdown', function () {
                     this.setFrame(1);
-                    isPush = true;
+                    isStartPush = true;
+                    if (bSound) {
+                        seClick.play();
+                    }
                 });
                 startBtn.on('pointerup', function () {
                     this.setFrame(0);
-                    if(isPush == true){
+                    if (isStartPush == true) {
                         currentScene.scene.start("stageSelectScene");
                     }
                 });
-                startBtn.on('pointerout', function(pointer, event){
+                startBtn.on('pointerout', function (pointer, event) {
                     this.setFrame(0);
-                    isPush = false;
+                    isStartPush = false;
                 });
 
-/*                clickButton = this.add
-                    .text(100, 400, "START TO CLICK")
-                    .setStroke("#0000ff", 4)
-                    .setBackgroundColor("#ddbcff")
-                    .setFontSize("60px")
-                    .setColor("#0f0")
+                var soundBtn = this.add.sprite(600, 750, 'soundBtnImg', 0)
+                    .setScale(0.8)
                     .setInteractive();
-                clickButton.on(
-                    "pointerdown",
-                    () => {
-                        this.scene.start("stageSelectScene");
-                    },
-                    this
-                );
-*/
+                soundBtn.on('pointerup', function () {
+                    bSound = bSound == true ? false : true;
+                    if (bSound) {
+                        soundBtn.setFrame(0);
+                    } else {
+                        soundBtn.setFrame(1);
+                    }
+                    localforage.setItem("GHGJKJdswkhoundOnOff", bSound);
+                });
+
+                localforage.getItem("GHGJKJdswkhoundOnOff", function (err, value) {
+                    if (value != null) {
+                        bSound = value;
+                    } else {
+                        bSound = true;
+                    }
+                    if (bSound) {
+                        soundBtn.setFrame(0);
+                    } else {
+                        soundBtn.setFrame(1);
+                    }
+
+                });
+
             }
         }
 
@@ -487,7 +642,9 @@
                 initUIParams();
                 bGame = true;
                 bAlive = true;
-                bgm.play();
+                if (bSound) {
+                    bgm.play();
+                }
             }
             update() {
                 gameCheck();
@@ -509,7 +666,7 @@
                         x: 0,
                         y: 2.5
                     },
-                    debug: false
+                    debug: true
                 }
             }, scale: {
                 mode: Phaser.Scale.FIT,
